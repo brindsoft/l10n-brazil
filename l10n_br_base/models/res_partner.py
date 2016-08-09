@@ -24,6 +24,7 @@ import re
 from openerp import models, fields, api
 from openerp.addons.l10n_br_base.tools import fiscal
 from openerp.exceptions import ValidationError
+import requests
 
 
 class ResPartner(models.Model):
@@ -179,6 +180,30 @@ class ResPartner(models.Model):
             if len(val) == 8:
                 self.zip = "%s-%s" % (val[0:5], val[5:8])
 
+        # get address http://viacep.com.br
+        headers = {'content-type': 'application/json'}
+        url = "http://viacep.com.br/ws/"+str(self.zip) +"/json/"
+        try:
+            r = requests.get(url, headers=headers)
+            result = r.json()
+            self.street = result.get('logradouro')
+            #self.street2 = result.get('complemento')
+            self.district = result.get('bairro')
+            # search country
+            country = self.env['res.country'].search([('code', 'ilike', 'BR')])
+            if len(country):
+                self.country_id = country.id
+                # serach state
+                state = self.env['res.country.state'].search([('country_id','=',country.id),('code','ilike',result.get('uf'))])
+                if len(state):
+                    self.state_id = state[0].id
+                    #search city
+                    city = self.env['l10n_br_base.city'].search([('state_id','=',state.id),('ibge_code', '=ilike', result.get('ibge')[2:])])
+                    if len(city):
+                        self.l10n_br_city_id = city[0].id
+        except:
+            pass
+
     @api.cr_uid_context
     def _address_fields(self, cr, uid, context=None):
         """ Returns the list of address fields that are synced from the parent
@@ -229,3 +254,6 @@ class ResPartnerBank(models.Model):
         result['value']['district'] = partner.district
         result['value']['l10n_br_city_id'] = partner.l10n_br_city_id.id
         return result
+
+    # consult address with https://viacep.com.br/
+
