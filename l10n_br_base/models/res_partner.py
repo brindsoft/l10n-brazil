@@ -99,8 +99,7 @@ class ResPartner(models.Model):
     @api.constrains('cnpj_cpf', 'country_id')
     def _check_cnpj_cpf(self):
         result = True
-        country_code = self.country_id.code or ''
-        if self.cnpj_cpf and country_code.upper() == 'BR':
+        if self.cnpj_cpf:
             if self.is_company:
                 if not fiscal.validate_cnpj(self.cnpj_cpf):
                     result = False
@@ -144,11 +143,11 @@ class ResPartner(models.Model):
         if not result:
             raise ValidationError(u"Inscrição Estadual Invalida!")
 
-    @api.onchange('cnpj_cpf', 'country_id')
+    @api.onchange('cnpj_cpf')
     def _onchange_cnpj_cpf(self):
-        cnpj_cpf = None
-        country_code = self.country_id.code or ''
-        if self.cnpj_cpf and country_code.upper() == 'BR':
+        self._check_cnpj_cpf()
+        cnpj_cpf = self.cnpj_cpf
+        if self.cnpj_cpf:
             val = re.sub('[^0-9]', '', self.cnpj_cpf)
             if self.is_company and len(val) == 14:
                 cnpj_cpf = "%s.%s.%s/%s-%s" % (
@@ -157,6 +156,9 @@ class ResPartner(models.Model):
                 cnpj_cpf = "%s.%s.%s-%s" % (
                     val[0:3], val[3:6], val[6:9], val[9:11])
             self.cnpj_cpf = cnpj_cpf
+            partnres = self.env['res.partner'].search([('cnpj_cpf','=',cnpj_cpf)])
+            if cnpj_cpf and len(partnres):
+                raise ValidationError(u'Já existe um parceiro cadastrado com este CPF/CNPJ !')
 
     @api.onchange('l10n_br_city_id')
     def _onchange_l10n_br_city_id(self):
